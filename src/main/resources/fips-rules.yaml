@@ -1,0 +1,18 @@
+# This file defines rules for FIPS compliance checks in Java applications.
+# It specifies the categories, class names, method names, and argument indices for FIPS-related
+# methods that should be checked for compliance with FIPS standards.# The rules are used to identify and validate the use of cryptographic algorithms and providers
+# that are compliant with FIPS (Federal Information Processing Standards).
+# The rules are structured to include the category of the cryptographic operation, the class name,
+# the method name, and the indices of the arguments that should be checked for FIPS compliance
+rules:
+  - category: MessageDigest
+    className: java.security.MessageDigest
+    methodName: getInstance
+    algoArgIndex: 0
+    providerArgIndex: 1
+
+  - category: Cipher
+    className: javax.crypto.Cipher
+    methodName: getInstance
+    algoArgIndex: 0
+    providerArgIndex: 1
