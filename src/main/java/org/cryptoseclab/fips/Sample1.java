@@ -22,10 +22,11 @@ import java.security.MessageDigest;
 
 public class Sample1
 {
+    public static final String ALGO = "MD5";
     public static void main(String[] args) throws Exception
     {
-        MessageDigest.getInstance("SHA-1");
-        Cipher.getInstance("AES/ECB/PKCS5Padding");
+        //MessageDigest.getInstance("SHA-1");
+        //Cipher.getInstance("AES/ECB/PKCS5Padding");
 
         System.out.println("Sample code executed successfully!");
     }

@@ -25,12 +25,12 @@ public class Sample
 {
     public static void main(String[] args) throws Exception
     {
-        String algorithm = "MD5"; // Example algorithm
+        String algorithm = Sample1.ALGO; //"MD5"; // Example algorithm
         System.out.println("Hello World!");
 
-        Sample.SampleMethod(algorithm);
-        MessageDigest.getInstance(algorithm);
-        Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
+        SampleMethod(algorithm);
+        //MessageDigest.getInstance(algorithm);
+        //Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
 
         System.out.println("Sample code executed successfully!");
     }

@@ -60,7 +60,7 @@ public class Main {
         Scene.v().loadNecessaryClasses();
         PackManager.v().runPacks();
 
-        CryptoAnalyzer analyzer = new RAnalyzer();
+        CryptoAnalyzer analyzer = new RuleBasedAnalyzer();
         List<ScanFinding> findings = analyzer.analyze(rules, Scene.v().getCallGraph());
 
         ReportWriter writer = new HtmlReportWriter();

@@ -1,130 +1,78 @@
-/*
- * Copyright (c) 2025 crypto-seclab
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
+// RuleBasedAnalyzer.java
 package org.cryptoseclab.fips.analysis;
 
 import org.cryptoseclab.fips.model.CryptoRule;
 import org.cryptoseclab.fips.model.ScanFinding;
-import soot.Body;
-import soot.Local;
-import soot.Scene;
-import soot.SootClass;
-import soot.SootMethod;
-import soot.Unit;
-import soot.Value;
-import soot.jimple.InvokeExpr;
-import soot.jimple.Stmt;
-import soot.jimple.StringConstant;
+import soot.*;
+import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.tagkit.LineNumberTag;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
-public class RuleBasedAnalyzer implements CryptoAnalyzer
-{
-    private static final Set<String> FIPS_PROVIDERS = Set.of(
-            "SunPKCS11", "BCFIPS", "OpenJCEPlusFIPS"
-    );
+public class RuleBasedAnalyzer implements CryptoAnalyzer {
+
+    private static final Set<String> FIPS_PROVIDERS = Set.of("SunPKCS11", "BCFIPS", "OpenJCEPlusFIPS");
 
     @Override
-    public List<ScanFinding> analyze(List<CryptoRule> rules, CallGraph callGraph)
-    {
+    public List<ScanFinding> analyze(List<CryptoRule> rules, CallGraph callGraph) {
         List<ScanFinding> findings = new ArrayList<>();
 
         for (SootClass cls : Scene.v().getApplicationClasses()) {
-            System.out.println("Analyzing class: " + cls.getName());
             for (SootMethod method : cls.getMethods()) {
                 if (!method.isConcrete()) continue;
 
-                Body body;
-                try {
-                    body = method.retrieveActiveBody();
-                } catch (Exception e) {
-                    continue;
-                }
-
-                List<Unit> unitList = new ArrayList<>(body.getUnits());
-                for (Unit unit : unitList) {
-                    if (!(unit instanceof Stmt stmt)) continue;
-                    if (!stmt.containsInvokeExpr()) continue;
-
-                    InvokeExpr invoke = stmt.getInvokeExpr();
-
-                    for (CryptoRule rule : rules) {
-                        if (!matchesRule(invoke, rule)) continue;
-
-                        int line = getLineNumber(unit);
-                        Value algoArg = invoke.getArg(rule.getAlgoArgIndex());
-                        String algoValue = "unresolved";
-                        String resolutionNote = "parameter not traced";
-
-                        if (algoArg instanceof StringConstant sc) {
-                            algoValue = sc.value;
-                            resolutionNote = "direct constant";
-                        } else if (algoArg instanceof Local local) {
-                            int paramIdx = getParameterIndex(method, local);
-                            if (paramIdx != -1) {
-                                Optional<String> resolved = resolveArgumentRecursively(method,
-                                        paramIdx, callGraph, new HashSet<>());
-                                if (resolved.isPresent()) {
-                                    algoValue = resolved.get();
-                                    resolutionNote = "traced recursively";
-                                }
-                            }
-                        }
-
-                        // Check provider (if applicable)
-                        String providerValue = "none";
-                        String providerStatus = "default";
-
-                        if (rule.getProviderArgIndex() != null && invoke.getArgCount() > rule.getProviderArgIndex()) {
-                            Value providerArg = invoke.getArg(rule.getProviderArgIndex());
-                            if (providerArg instanceof StringConstant psc) {
-                                providerValue = psc.value;
-                                providerStatus = FIPS_PROVIDERS.contains(
-                                        providerValue) ? "FIPS" : "⚠️ Non-FIPS";
-                            } else {
-                                providerValue = "unknown";
-                                providerStatus = "unresolved";
-                            }
-                        }
-
-                        findings.add(new ScanFinding(
-                                rule.getCategory(),
-                                method.getDeclaringClass().getName(),
-                                method.getSubSignature(),
-                                algoValue,
-                                resolutionNote,
-                                line,
-                                providerValue,
-                                providerStatus
-                        ));
-
-                    }
-                }
+                analyzeMethodBody(method, rules, callGraph, findings);
             }
         }
         return findings;
+    }
+
+    private void analyzeMethodBody(SootMethod method, List<CryptoRule> rules, CallGraph callGraph, List<ScanFinding> findings) {
+        Body body;
+        try {
+            body = method.retrieveActiveBody();
+        } catch (Exception e) {
+            return;
+        }
+
+        for (Unit unit : body.getUnits()) {
+            //Focus only on statements that are method calls
+            if (!(unit instanceof Stmt stmt) || !stmt.containsInvokeExpr()) continue;
+
+            InvokeExpr invoke = stmt.getInvokeExpr();
+            for (CryptoRule rule : rules) {
+                if (!matchesRule(invoke, rule)) continue;
+
+                ScanFinding finding = buildFinding(rule, method, stmt, invoke, callGraph);
+                findings.add(finding);
+            }
+        }
+    }
+
+    private ScanFinding buildFinding(CryptoRule rule, SootMethod method, Stmt stmt, InvokeExpr invoke, CallGraph callGraph) {
+        int line = getLineNumber(stmt);
+
+        Value algoArg = invoke.getArg(rule.getAlgoArgIndex());
+        String[] algorithmResult = resolveAlgorithmArgument(algoArg, method, callGraph);
+        String algoValue = algorithmResult[0];
+        String resolutionNote = algorithmResult[1];
+
+        String[] providerResult = resolveProvider(invoke, rule);
+        String providerValue = providerResult[0];
+        String providerStatus = providerResult[1];
+
+        return new ScanFinding(
+                rule.getCategory(),
+                method.getDeclaringClass().getName(),
+                method.getSubSignature(),
+                algoValue,
+                resolutionNote,
+                line,
+                providerValue,
+                providerStatus
+        );
     }
 
     private boolean matchesRule(InvokeExpr invoke, CryptoRule rule) {
@@ -134,11 +82,33 @@ public class RuleBasedAnalyzer implements CryptoAnalyzer
                 && invoke.getArgCount() > rule.getAlgoArgIndex();
     }
 
-    private Optional<String> resolveArgumentRecursively(SootMethod callee, int paramIndex,
-                                                        CallGraph cg,
-                                                        Set<SootMethod> visited)
-    {
-        if (visited.contains(callee)) return Optional.empty();
+    private String[] resolveAlgorithmArgument(Value arg, SootMethod method, CallGraph cg) {
+        if (arg instanceof StringConstant sc) {
+            return new String[]{sc.value, "direct constant"};
+        } else if (arg instanceof Local local) {
+            Optional<String> resolved = resolveStringArg(method, local, cg, new HashSet<>());
+            return new String[]{resolved.orElse("unresolved"), resolved.isPresent() ? "traced recursively" : "parameter not traced"};
+        }
+        return new String[]{"unresolved", "unknown expression"};
+    }
+
+    private String[] resolveProvider(InvokeExpr invoke, CryptoRule rule) {
+        if (rule.getProviderArgIndex() != null && invoke.getArgCount() > rule.getProviderArgIndex()) {
+            Value providerArg = invoke.getArg(rule.getProviderArgIndex());
+            if (providerArg instanceof StringConstant psc) {
+                String providerValue = psc.value;
+                String status = FIPS_PROVIDERS.contains(providerValue) ? "FIPS" : "⚠️ Non-FIPS";
+                return new String[]{providerValue, status};
+            } else {
+                return new String[]{"unknown", "unresolved"};
+            }
+        }
+        return new String[]{"none", "default"};
+    }
+
+    private Optional<String> resolveStringArg(SootMethod callee, Local local, CallGraph cg, Set<SootMethod> visited) {
+        int paramIndex = getParameterIndex(callee, local);
+        if (paramIndex == -1 || visited.contains(callee)) return Optional.empty();
         visited.add(callee);
 
         Iterator<Edge> edges = cg.edgesInto(callee);
@@ -152,19 +122,16 @@ public class RuleBasedAnalyzer implements CryptoAnalyzer
                 Value arg = inv.getArg(paramIndex);
                 if (arg instanceof StringConstant sc) {
                     return Optional.of(sc.value);
-                } else if (arg instanceof Local local) {
-                    int newParamIdx = getParameterIndex(edge.src(), local);
-                    if (newParamIdx != -1) {
-                        return resolveArgumentRecursively(edge.src(), newParamIdx, cg, visited);
-                    }
+                } else if (arg instanceof Local l) {
+                    Optional<String> nested = resolveStringArg(edge.src(), l, cg, visited);
+                    if (nested.isPresent()) return nested;
                 }
             }
         }
         return Optional.empty();
     }
 
-    private int getParameterIndex(SootMethod method, Local local)
-    {
+    private int getParameterIndex(SootMethod method, Local local) {
         if (!method.hasActiveBody()) return -1;
         List<Local> params = method.retrieveActiveBody().getParameterLocals();
         for (int i = 0; i < params.size(); i++) {
@@ -184,4 +151,3 @@ public class RuleBasedAnalyzer implements CryptoAnalyzer
         return -1;
     }
 }
-
