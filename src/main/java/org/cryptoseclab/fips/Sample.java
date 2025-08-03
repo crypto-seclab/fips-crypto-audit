@@ -30,7 +30,7 @@ public class Sample
 
         SampleMethod(algorithm);
         //MessageDigest.getInstance(algorithm);
-        //Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
+        Cipher.getInstance("AES/CBC/PKCS5Padding", "SunJCE");
 
         System.out.println("Sample code executed successfully!");
     }
@@ -43,11 +43,11 @@ public class Sample
     private static void SampleMethod1(final String algorithm) throws Exception
     {
         MessageDigest.getInstance(algorithm, "BCFIPS");
-        MessageDigest.getInstance(algorithm, new Provider("BCFIPS", 1.0, "BCFIPS Provider") {;
-            @Override
-            public String getInfo() {
-                return "BCFIPS Provider";
-            }
-        });
+//        MessageDigest.getInstance(algorithm, new Provider("BCFIPS", 1.0, "BCFIPS Provider") {;
+//            @Override
+//            public String getInfo() {
+//                return "BCFIPS Provider";
+//            }
+//        });
     }
 }

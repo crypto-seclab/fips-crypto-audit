@@ -125,7 +125,50 @@ public class RuleBasedAnalyzer implements CryptoAnalyzer {
                 } else if (arg instanceof Local l) {
                     Optional<String> nested = resolveStringArg(edge.src(), l, cg, visited);
                     if (nested.isPresent()) return nested;
+
+                    // Handle static field assigned to local
+                    Optional<String> fromField = resolveStaticFieldFromAssignments(edge.src(), l);
+                    if (fromField.isPresent()) return fromField;
                 }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> resolveStaticFieldFromAssignments(SootMethod method, Local local) {
+        if (!method.hasActiveBody()) return Optional.empty();
+
+        for (Unit unit : method.retrieveActiveBody().getUnits()) {
+            if (unit instanceof AssignStmt assignStmt &&
+                    assignStmt.getLeftOp() instanceof Local lhs &&
+                    lhs.getName().equals(local.getName())) {
+
+                Value rhs = assignStmt.getRightOp();
+                if (rhs instanceof StaticFieldRef sfr) {
+                    return tryResolveStaticFinalField(sfr.getField());
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> tryResolveStaticFinalField(SootField field) {
+        SootClass declaringClass = field.getDeclaringClass();
+        if (!declaringClass.isApplicationClass()) return Optional.empty();
+
+        for (SootMethod method : declaringClass.getMethods()) {
+            if (!method.getName().equals("<clinit>")) continue;
+            try {
+                Body clinitBody = method.retrieveActiveBody();
+                for (Unit unit : clinitBody.getUnits()) {
+                    if (!(unit instanceof AssignStmt assignStmt)) continue;
+                    if (!(assignStmt.getLeftOp() instanceof StaticFieldRef lhs)) continue;
+                    if (!lhs.getField().equals(field)) continue;
+                    if (assignStmt.getRightOp() instanceof StringConstant sc) {
+                        return Optional.of(sc.value);
+                    }
+                }
+            } catch (Exception ignored) {
             }
         }
         return Optional.empty();
@@ -142,8 +185,7 @@ public class RuleBasedAnalyzer implements CryptoAnalyzer {
         return -1;
     }
 
-    private int getLineNumber(Unit unit)
-    {
+    private int getLineNumber(Unit unit) {
         if (unit.hasTag("LineNumberTag")) {
             LineNumberTag tag = (LineNumberTag) unit.getTag("LineNumberTag");
             return tag.getLineNumber();

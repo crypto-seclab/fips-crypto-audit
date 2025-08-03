@@ -18,7 +18,6 @@
 package org.cryptoseclab.fips;
 
 import org.cryptoseclab.fips.analysis.CryptoAnalyzer;
-import org.cryptoseclab.fips.analysis.RAnalyzer;
 import org.cryptoseclab.fips.analysis.RuleBasedAnalyzer;
 import org.cryptoseclab.fips.model.CryptoRule;
 import org.cryptoseclab.fips.model.ScanFinding;
